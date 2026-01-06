@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Color Match PWA</title>
+    
+    <!-- This is the embedded Manifest. It tells the phone how to install the app. -->
+    <link rel="manifest" href="data:application/manifest+json,{
+        %22name%22:%22Color%20Match%20Game%22,
+        %22short_name%22:%22ColorMatch%22,
+        %22start_url%22:%22index.html%22,
+        %22display%22:%22standalone%22,
+        %22background_color%22:%22#121212%22,
+        %22theme_color%22:%22#6200ee%22,
+        %22icons%22:[
+            {
+                %22src%22:%22data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%236200ee'/%3E%3Ccircle cx='50' cy='50' r='30' fill='white'/%3E%3Cpath d='M40 50 L60 50 M50 40 L50 60' stroke='%236200ee' stroke-width='8'/%3E%3C/svg%3E%22,
+                %22sizes%22:%22192x192%22,
+                %22type%22:%22image/svg+xml%22
+            }
+        ]
+    }">
+
+    <style>
+        :root {
+            --bg: #121212;
+            --text: #ffffff;
+            --primary: #6200ee;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        #ui {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        #score-board {
+            font-size: 2.5rem;
+            font-weight: bold;
+        }
+
+        #timer-bar-container {
+            width: 100%;
+            height: 12px;
+            background: #333;
+            border-radius: 6px;
+            margin-bottom: 30px;
+            overflow: hidden;
+        }
+
+        #timer-bar {
+            width: 100%;
+            height: 100%;
+            background: var(--primary);
+            transition: width 0.1s linear;
+        }
+
+        #target-box {
+            flex-grow: 1;
+            width: 100%;
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            font-weight: 900;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            margin-bottom: 20px;
+            transition: background-color 0.2s ease;
+        }
+
+        #controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .btn {
+            height: 120px;
+            border-radius: 20px;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            transition: transform 0.1s, opacity 0.2s;
+        }
+
+        .btn:active {
+            transform: scale(0.92);
+        }
+
+        #message-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(18, 18, 18, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            border-radius: 20px;
+            text-align: center;
+            padding: 30px;
+        }
+
+        .hidden { display: none !important; }
+
+        h1 { margin: 0 0 10px 0; font-size: 2.5rem; color: var(--primary); }
+        p { margin: 0 0 30px 0; font-size: 1.2rem; color: #aaa; line-height: 1.5; }
+
+        .play-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 18px 50px;
+            font-size: 1.6rem;
+            font-weight: bold;
+            border-radius: 40px;
+            cursor: pointer;
+            box-shadow: 0 10px 20px rgba(98, 0, 238, 0.3);
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="ui">
+        <div id="score-board">0</div>
+        <div id="high-score">Best: 0</div>
+    </div>
+
+    <div id="timer-bar-container">
+        <div id="timer-bar"></div>
+    </div>
+
+    <div id="target-box">READY?</div>
+
+    <div id="controls">
+        <button class="btn" id="btn-0" onclick="checkMatch(0)"></button>
+        <button class="btn" id="btn-1" onclick="checkMatch(1)"></button>
+    </div>
+
+    <div id="message-overlay">
+        <h1 id="msg-title">COLOR MATCH</h1>
+        <p id="msg-desc">Tap the button that matches the center color before time runs out!</p>
+        <button class="play-btn" onclick="startGame()">PLAY</button>
+    </div>
+</div>
+
+<script>
+    const COLORS = [
+        { name: 'RED', hex: '#ff5252' },
+        { name: 'BLUE', hex: '#448aff' },
+        { name: 'GREEN', hex: '#69f0ae' },
+        { name: 'YELLOW', hex: '#ffd740' },
+        { name: 'PURPLE', hex: '#e040fb' },
+        { name: 'ORANGE', hex: '#ffab40' }
+    ];
+
+    let score = 0;
+    let highScore = localStorage.getItem('colorMatchBest') || 0;
+    let timeLeft = 100;
+    let gameActive = false;
+    let targetIndex = 0;
+    let optionIndices = [0, 1];
+    let timerInterval;
+
+    const targetBox = document.getElementById('target-box');
+    const scoreBoard = document.getElementById('score-board');
+    const highScoreBoard = document.getElementById('high-score');
+    const timerBar = document.getElementById('timer-bar');
+    const overlay = document.getElementById('message-overlay');
+    const msgTitle = document.getElementById('msg-title');
+    const msgDesc = document.getElementById('msg-desc');
+
+    highScoreBoard.innerText = `Best: ${highScore}`;
+
+    function startGame() {
+        score = 0;
+        timeLeft = 100;
+        gameActive = true;
+        scoreBoard.innerText = score;
+        overlay.classList.add('hidden');
+        nextRound();
+        
+        if (timerInterval) clearInterval(timerInterval);
+        timerInterval = setInterval(updateTimer, 50);
+    }
+
+    function nextRound() {
+        targetIndex = Math.floor(Math.random() * COLORS.length);
+        targetBox.style.backgroundColor = COLORS[targetIndex].hex;
+        targetBox.innerText = ''; 
+
+        let otherIndex;
+        do {
+            otherIndex = Math.floor(Math.random() * COLORS.length);
+        } while (otherIndex === targetIndex);
+
+        optionIndices = Math.random() > 0.5 ? [targetIndex, otherIndex] : [otherIndex, targetIndex];
+
+        document.getElementById('btn-0').style.backgroundColor = COLORS[optionIndices[0]].hex;
+        document.getElementById('btn-1').style.backgroundColor = COLORS[optionIndices[1]].hex;
+        
+        // Reset timer based on difficulty (faster as you go)
+        timeLeft = Math.max(25, 100 - (score * 1.2)); 
+    }
+
+    function checkMatch(btnIdx) {
+        if (!gameActive) return;
+
+        if (optionIndices[btnIdx] === targetIndex) {
+            score++;
+            scoreBoard.innerText = score;
+            nextRound();
+        } else {
+            gameOver("WRONG COLOR!");
+        }
+    }
+
+    function updateTimer() {
+        if (!gameActive) return;
+        
+        timeLeft -= 1.8;
+        timerBar.style.width = `${timeLeft}%`;
+
+        if (timeLeft <= 0) {
+            gameOver("TIME'S UP!");
+        }
+    }
+
+    function gameOver(reason) {
+        gameActive = false;
+        clearInterval(timerInterval);
+        
+        if (score > highScore) {
+            highScore = score;
+            localStorage.setItem('colorMatchBest', highScore);
+            highScoreBoard.innerText = `Best: ${highScore}`;
+        }
+
+        msgTitle.innerText = reason;
+        msgDesc.innerText = `Your Score: ${score}\nBest: ${highScore}`;
+        overlay.classList.remove('hidden');
+    }
+
+    /** * Note: PWA Service Workers require a physical file (e.g., sw.js) 
+     * or a script served from the same origin to register. 
+     * In this sandboxed preview environment, Service Workers are disabled 
+     * to prevent security errors. 
+     */
+    console.log("Game loaded. Manifest is embedded in the header for PWA installation.");
+</script>
+
+</body>
+</html>
